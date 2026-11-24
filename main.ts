@@ -758,10 +758,16 @@ function parseV4a(lines: string[], strict: boolean): Edit[] {
           i++;
           continue;
         }
-        if (b.trim() === '*** End of File') {
+        if (b === '*** End of File') {
           if (cur === null) throw new Exit2(`error: parse ${i + 1}`);
           cur.eof = true;
           endChunk();
+          i++;
+          continue;
+        }
+        if (b === '' && cur === null && chunks.length > 0) {
+          // A blank line after a closed chunk, at the end of the section,
+          // is not part of it.
           i++;
           continue;
         }
@@ -968,14 +974,20 @@ function run(args: string[]): { code: number; out: string[] } {
     const now = tree.now.get(p)!;
     if (was === now) continue;
     rows.push({ key: p, line: `${was === null ? 'A' : now === null ? 'D' : 'M'} ${p}` });
-    if (check) continue;
-    if (now === null) rmSync(p, { force: true });
-    else {
-      mkdirSync(dirname(p), { recursive: true });
-      writeFileSync(p, now);
-    }
   }
   rows.sort((a, b) => Buffer.compare(Buffer.from(a.key), Buffer.from(b.key)));
+  if (!check) {
+    for (const p of [...tree.now.keys()].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))) {
+      const was = tree.original(p);
+      const now = tree.now.get(p)!;
+      if (was === now) continue;
+      if (now === null) rmSync(p, { force: true });
+      else {
+        mkdirSync(dirname(p), { recursive: true });
+        writeFileSync(p, now);
+      }
+    }
+  }
   return { code: 0, out: [...rows.map((r) => r.line), `ok: ${rows.length} ${rows.length === 1 ? 'file' : 'files'}`] };
 }
 
